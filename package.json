@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
 "scripts": {
-  "dev": "wrangler pages dev .vercel/output/static --compatibility-date=2025-12-15 --port 8788",
+  "dev": "wrangler pages dev .vercel/output --compatibility-date=2025-12-15 --port 8788",
   "dev:next": "next dev",
 
   "build": "next build",
-  "build:cf": "npx @cloudflare/next-on-pages",
+  "build:cf": "npx @cloudflare/next-on-pages@1",
 
-  "preview": "wrangler pages dev .vercel/output/static --compatibility-date=2025-12-15 --port 8788",
+  "preview": "wrangler pages dev .vercel/output --compatibility-date=2025-12-15 --port 8788",
   "start": "next start",
   "lint": "eslint"
 },
