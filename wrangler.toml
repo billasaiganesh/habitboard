@@ -1,0 +1,8 @@
+name = "habitboard"
+compatibility_date = "2025-12-15"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "habitboard_db"
+database_id = "1201ada1-e31c-4c67-b302-39fee70fdad1"
+migrations_dir = "migrations"
