@@ -4,16 +4,31 @@ import { todayYMD } from "@/lib/date";
 import type { MonthResponse, StatsResponse } from "@/lib/types";
 
 type DayRow = {
-  day: string; // YYYY-MM-DD
+  day: string;
   isWin: boolean;
-  pct: number; // 0..1
+  totalPoints: number;
+  donePoints: number;
+  templateId: string | null;
 };
+
+type ApiDay = {
+  day: string;
+  isWin: boolean;
+  totalPoints: number;
+  donePoints: number;
+  templateId: string | null;
+};
+
+type DayTile = ApiDay & { pct: number };
+
+
+
 
 export default function Month() {
   const today = todayYMD();
   const [guest, setGuest] = useState(false);
   const [ym, setYm] = useState(today.slice(0, 7)); // YYYY-MM
-  const [rows, setRows] = useState<DayRow[]>([]);
+  const [rows, setRows] = useState<DayTile[]>([]);
   const [summary, setSummary] = useState<StatsResponse | null>(null);
 
   const label = useMemo(() => ym, [ym]);
@@ -25,13 +40,20 @@ export default function Month() {
         setGuest(true);
         return;
       }
-      const data = (await res.json()) as MonthResponse<DayRow>;
-      setRows(data.days || []);
-
+      const data = (await res.json()) as MonthResponse;
+  
+      setRows(
+        (data.days || []).map((d) => ({
+          ...d,
+          pct: d.totalPoints ? d.donePoints / d.totalPoints : 0,
+        }))
+      );
+  
       const sRes = await fetch(`/api/stats?day=${today}`);
       if (sRes.ok) setSummary((await sRes.json()) as StatsResponse);
     })();
   }, [ym, today]);
+  
 
   if (guest) {
     return (

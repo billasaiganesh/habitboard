@@ -1,11 +1,18 @@
-import { requireUser, type Env } from "../_lib/auth";
+import type { NextRequest } from "next/server";
+import { requireUser } from "@/lib/server/auth";
+import { first, all, run } from "@/lib/server/db";
+
+export const config = { runtime: "edge" };
 
 function j(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function ymd(d: Date) {
-  return new Intl.DateTimeFormat("en-CA", { year:"numeric", month:"2-digit", day:"2-digit" }).format(d);
+  return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
 function addDays(ymdStr: string, delta: number) {
@@ -17,7 +24,7 @@ function addDays(ymdStr: string, delta: number) {
 function mondayWeekRange(day: string) {
   const d = new Date(day + "T00:00:00");
   const dow = d.getDay(); // 0 Sun..6 Sat
-  const diffToMon = (dow === 0 ? -6 : 1 - dow);
+  const diffToMon = dow === 0 ? -6 : 1 - dow;
   const mon = new Date(d);
   mon.setDate(d.getDate() + diffToMon);
   const sun = new Date(mon);
@@ -27,104 +34,111 @@ function mondayWeekRange(day: string) {
 
 function monthRange(day: string) {
   const d = new Date(day + "T00:00:00");
-  const first = new Date(d.getFullYear(), d.getMonth(), 1);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return { start: ymd(first), end: ymd(last) };
+  const firstD = new Date(d.getFullYear(), d.getMonth(), 1);
+  const lastD = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { start: ymd(firstD), end: ymd(lastD) };
 }
 
-async function ensureSettings(DB: D1Database, userId: string) {
-  await DB.prepare(
+async function ensureSettings(userId: string) {
+  await run(
     `INSERT INTO user_settings (user_id) VALUES (?)
-     ON CONFLICT(user_id) DO NOTHING`
-  ).bind(userId).run();
+     ON CONFLICT(user_id) DO NOTHING`,
+    [userId]
+  );
 }
 
-async function pointsForDay(DB: D1Database, userId: string, day: string) {
-  const plan = await DB.prepare(
-    `SELECT template_id FROM day_plan WHERE user_id = ? AND day = ?`
-  ).bind(userId, day).first<{ template_id: string | null }>();
+async function pointsForDay(userId: string, day: string) {
+  const plan = await first<{ template_id: string | null }>(
+    `SELECT template_id FROM day_plans WHERE user_id = ? AND day = ?`,
+    [userId, day]
+  );
   const templateId = plan?.template_id ?? null;
 
   if (!templateId) {
-    const totalRow = await DB.prepare(
+    const totalRow = await first<{ totalPoints: number }>(
       `SELECT COALESCE(SUM(points), 0) AS totalPoints
-       FROM habits WHERE user_id = ? AND active = 1`
-    ).bind(userId).first<{ totalPoints: number }>();
+       FROM habits WHERE user_id = ? AND active = 1`,
+      [userId]
+    );
 
-    const doneRow = await DB.prepare(
+    const doneRow = await first<{ donePoints: number }>(
       `SELECT COALESCE(SUM(h.points), 0) AS donePoints
        FROM habit_checks hc
        JOIN habits h ON h.id = hc.habit_id
-       WHERE hc.user_id = ? AND hc.day = ? AND hc.checked = 1 AND h.active = 1`
-    ).bind(userId, day).first<{ donePoints: number }>();
+       WHERE hc.user_id = ? AND hc.day = ? AND hc.checked = 1 AND h.active = 1`,
+      [userId, day]
+    );
 
     return { totalPoints: Number(totalRow?.totalPoints || 0), donePoints: Number(doneRow?.donePoints || 0) };
   }
 
-  const totalRow = await DB.prepare(
+  const totalRow = await first<{ totalPoints: number }>(
     `SELECT COALESCE(SUM(h.points), 0) AS totalPoints
      FROM habits h
      JOIN template_habits th ON th.habit_id = h.id
-     WHERE h.user_id = ? AND h.active = 1 AND th.template_id = ?`
-  ).bind(userId, templateId).first<{ totalPoints: number }>();
+     WHERE h.user_id = ? AND h.active = 1 AND th.template_id = ?`,
+    [userId, templateId]
+  );
 
-  const doneRow = await DB.prepare(
+  const doneRow = await first<{ donePoints: number }>(
     `SELECT COALESCE(SUM(h.points), 0) AS donePoints
      FROM habit_checks hc
      JOIN habits h ON h.id = hc.habit_id
      JOIN template_habits th ON th.habit_id = h.id
      WHERE hc.user_id = ? AND hc.day = ? AND hc.checked = 1
-       AND h.active = 1 AND th.template_id = ?`
-  ).bind(userId, day, templateId).first<{ donePoints: number }>();
+       AND h.active = 1 AND th.template_id = ?`,
+    [userId, day, templateId]
+  );
 
   return { totalPoints: Number(totalRow?.totalPoints || 0), donePoints: Number(doneRow?.donePoints || 0) };
 }
 
-async function isCoreWin(DB: D1Database, userId: string, day: string) {
-  const core = await DB.prepare(
-    `SELECT habit_id FROM user_core_habits WHERE user_id = ?`
-  ).bind(userId).all();
-  const coreIds = (core.results || []).map((r: any) => r.habit_id) as string[];
+async function isCoreWin(userId: string, day: string) {
+  const core = await all<{ habit_id: string }>(
+    `SELECT habit_id FROM user_core_habits WHERE user_id = ?`,
+    [userId]
+  );
+  const coreIds = core.map((r) => r.habit_id);
   if (coreIds.length === 0) return { configured: false, win: false };
 
-  const checked = await DB.prepare(
-    `SELECT habit_id FROM habit_checks
-     WHERE user_id = ? AND day = ? AND checked = 1`
-  ).bind(userId, day).all();
-
-  const checkedSet = new Set((checked.results || []).map((r: any) => r.habit_id));
+  const checked = await all<{ habit_id: string }>(
+    `SELECT habit_id FROM habit_checks WHERE user_id = ? AND day = ? AND checked = 1`,
+    [userId, day]
+  );
+  const checkedSet = new Set(checked.map((r) => r.habit_id));
   return { configured: true, win: coreIds.every((id) => checkedSet.has(id)) };
 }
 
-async function isDailyWin(DB: D1Database, userId: string, day: string) {
-  await ensureSettings(DB, userId);
-  const s = await DB.prepare(
-    `SELECT win_mode, win_threshold_percent FROM user_settings WHERE user_id = ?`
-  ).bind(userId).first<{ win_mode: string; win_threshold_percent: number }>();
+async function isDailyWin(userId: string, day: string) {
+  await ensureSettings(userId);
+  const s = await first<{ win_mode: string | null; win_threshold_percent: number | null }>(
+    `SELECT win_mode, win_threshold_percent FROM user_settings WHERE user_id = ?`,
+    [userId]
+  );
 
-  const mode = (s?.win_mode || "points") as "points" | "core";
+  const mode = ((s?.win_mode || "points") as "points" | "core");
   const threshold = Number(s?.win_threshold_percent || 70);
 
   if (mode === "core") {
-    const core = await isCoreWin(DB, userId, day);
+    const core = await isCoreWin(userId, day);
     if (core.configured) return { win: core.win, mode: "core" as const, threshold, usedFallback: false };
-    const { totalPoints, donePoints } = await pointsForDay(DB, userId, day);
-    const win = totalPoints > 0 && (donePoints / totalPoints) >= (threshold / 100);
+    const { totalPoints, donePoints } = await pointsForDay(userId, day);
+    const win = totalPoints > 0 && donePoints / totalPoints >= threshold / 100;
     return { win, mode: "points" as const, threshold, usedFallback: true };
   }
 
-  const { totalPoints, donePoints } = await pointsForDay(DB, userId, day);
-  const win = totalPoints > 0 && (donePoints / totalPoints) >= (threshold / 100);
+  const { totalPoints, donePoints } = await pointsForDay(userId, day);
+  const win = totalPoints > 0 && donePoints / totalPoints >= threshold / 100;
   return { win, mode: "points" as const, threshold, usedFallback: false };
 }
 
-async function dailyWinMap(DB: D1Database, userId: string, endDay: string, lookbackDays: number) {
+async function dailyWinMap(userId: string, endDay: string, lookbackDays: number) {
   const days: string[] = [];
   for (let i = lookbackDays - 1; i >= 0; i--) days.push(addDays(endDay, -i));
 
   const winByDay: Record<string, boolean> = {};
   for (const d of days) {
-    const r = await isDailyWin(DB, userId, d);
+    const r = await isDailyWin(userId, d);
     winByDay[d] = r.win;
   }
   return { days, winByDay };
@@ -143,26 +157,32 @@ function winsInRange(days: string[], winByDay: Record<string, boolean>, start: s
   return days.filter((d) => d >= start && d <= end && winByDay[d]).length;
 }
 
-export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const auth = await requireUser(context.request, context.env);
+export default async function handler(req: NextRequest): Promise<Response> {
+  if (req.method !== "GET") return j({ error: "Method not allowed" }, 405);
+
+  const auth = await requireUser(req);
   if (!auth) return j({ error: "Unauthorized" }, 401);
 
-  const url = new URL(context.request.url);
-  const day = url.searchParams.get("day") || new Intl.DateTimeFormat("en-CA").format(new Date());
+  const url = new URL(req.url);
+  const day = url.searchParams.get("day") || ymd(new Date());
 
-  const DB = context.env.DB;
-  await ensureSettings(DB, auth.userId);
+  await ensureSettings(auth.userId);
 
-  const settings = await DB.prepare(
+  const settings = await first<{
+    win_mode: "points" | "core" | null;
+    win_threshold_percent: number | null;
+    weekly_win_target: number | null;
+    monthly_win_target: number | null;
+  }>(
     `SELECT win_mode, win_threshold_percent, weekly_win_target, monthly_win_target
-     FROM user_settings WHERE user_id = ?`
-  ).bind(auth.userId).first<any>();
+     FROM user_settings WHERE user_id = ?`,
+    [auth.userId]
+  );
 
-  const pts = await pointsForDay(DB, auth.userId, day);
-  const daily = await isDailyWin(DB, auth.userId, day);
+  const pts = await pointsForDay(auth.userId, day);
+  const daily = await isDailyWin(auth.userId, day);
 
-  const { days, winByDay } = await dailyWinMap(DB, auth.userId, day, 120);
-
+  const { days, winByDay } = await dailyWinMap(auth.userId, day, 120);
   const dailyStreak = computeDailyStreak(days, winByDay);
 
   const w = mondayWeekRange(day);
@@ -208,4 +228,4 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     rates: { winRate7, winRate30 },
     settings,
   });
-};
+}

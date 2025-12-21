@@ -1,50 +1,49 @@
-import { type Env } from "../../_lib/auth";
-import { hashPasscode } from "../../_lib/crypto";
-import { setCookie } from "../../_lib/cookies";
+import type { NextRequest } from "next/server";
+import { first, run } from "@/lib/server/db";
+import { hashPassword } from "@/lib/server/password";
 
-function j(data: unknown, status = 200, extraHeaders?: Record<string, string>) {
+export const config = { runtime: "edge" };
+
+function j(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...(extraHeaders || {}) },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
-export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const body = await context.request.json().catch(() => null) as
-    | { username?: string; passcode?: string }
-    | null;
+function makeId() {
+  return crypto.randomUUID();
+}
 
-  const username = (body?.username || "").trim().toLowerCase();
-  const passcode = (body?.passcode || "").trim();
+export default async function handler(req: NextRequest): Promise<Response> {
+  if (req.method !== "POST") return j({ error: "Method not allowed" }, 405);
 
-  if (!username || username.length < 3) return j({ error: "Username must be at least 3 chars" }, 400);
-  if (!passcode || passcode.length < 4) return j({ error: "Passcode must be at least 4 chars" }, 400);
+  const body =
+    (await req.json().catch(() => null)) as
+      | { username?: string; password?: string }
+      | null;
 
-  const existing = await context.env.DB.prepare(
-    `SELECT id FROM users WHERE username = ?`
-  ).bind(username).first();
+  const username = (body?.username || "").trim();
+  const password = body?.password || "";
 
-  if (existing) return j({ error: "Username already exists" }, 409);
+  if (!username || username.length < 3) return j({ error: "Username must be at least 3 characters" }, 400);
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) return j({ error: "Username can only use letters, numbers, _" }, 400);
+  if (!password || password.length < 6) return j({ error: "Password must be at least 6 characters" }, 400);
 
-  const { saltB64, hashB64 } = await hashPasscode(passcode);
-
-  const userId = crypto.randomUUID();
-  await context.env.DB.prepare(
-    `INSERT INTO users (id, username, pass_hash, pass_salt) VALUES (?, ?, ?, ?)`
-  ).bind(userId, username, hashB64, saltB64).run();
-
-  // create session
-  const token = crypto.randomUUID() + crypto.randomUUID();
-  const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30); // 30d
-  const expiresSql = expires.toISOString().slice(0, 19).replace("T", " ");
-
-  await context.env.DB.prepare(
-    `INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)`
-  ).bind(crypto.randomUUID(), userId, token, expiresSql).run();
-
-  return j(
-    { ok: true, username },
-    200,
-    { "Set-Cookie": setCookie("hb_session", token, { maxAgeSec: 60 * 60 * 24 * 30 }) }
+  const exists = await first<{ id: string }>(
+    `SELECT id FROM users WHERE username = ?`,
+    [username]
   );
-};
+  if (exists) return j({ error: "Username already taken" }, 409);
+
+  const { saltB64, hashB64 } = await hashPassword(password);
+
+  const id = makeId();
+  await run(
+    `INSERT INTO users (id, username, password_hash, password_salt, created_at)
+     VALUES (?, ?, ?, ?, datetime('now'))`,
+    [id, username, hashB64, saltB64]
+  );
+
+  return j({ ok: true });
+}

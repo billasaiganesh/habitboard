@@ -14,23 +14,21 @@ export default async function handler(req: NextRequest): Promise<Response> {
   const auth = await requireUser(req);
   if (!auth) return j({ error: "Unauthorized" }, 401);
 
-  const body = (await req.json().catch(() => null)) as { id?: string } | null;
+  const body = (await req.json().catch(() => null)) as { id?: string; active?: boolean } | null;
   const id = body?.id;
-  if (!id) return j({ error: "Missing id" }, 400);
+  const active = body?.active;
+
+  if (!id || typeof active !== "boolean") return j({ error: "Bad request" }, 400);
 
   const owned = await first<{ id: string }>(
-    `SELECT id FROM templates WHERE id = ? AND user_id = ?`,
+    `SELECT id FROM habits WHERE id = ? AND user_id = ?`,
     [id, auth.userId]
   );
   if (!owned) return j({ error: "Not found" }, 404);
 
-  await run(`DELETE FROM template_habits WHERE template_id = ?`, [id]);
-  await run(`DELETE FROM templates WHERE id = ? AND user_id = ?`, [id, auth.userId]);
-
-  // clear any day_plan rows pointing to it
   await run(
-    `UPDATE day_plan SET template_id = NULL WHERE user_id = ? AND template_id = ?`,
-    [auth.userId, id]
+    `UPDATE habits SET active = ? WHERE id = ? AND user_id = ?`,
+    [active ? 1 : 0, id, auth.userId]
   );
 
   return j({ ok: true });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type {
   Habit,
@@ -6,9 +6,10 @@ import type {
   RulesResponse,
   Template,
   TemplateListResponse,
-  TemplateGetResponse,
   ErrorResponse,
+  TemplateGetHabitsResponse,
 } from "@/lib/types";
+
 
 type HabitsResponse = { habits: Habit[] };
 
@@ -23,7 +24,7 @@ export default function Settings() {
   const [templateHabitIds, setTemplateHabitIds] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string>("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setMsg("");
 
     // habits
@@ -61,26 +62,26 @@ export default function Settings() {
       setMsg(e.error || "Failed to load templates");
       return;
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void load();
+  }, [load]);
+
 
   async function loadTemplateHabits(id: string) {
     setTemplateHabitIds(new Set());
     if (!id) return;
-
-    const res = await fetch(`/api/templates/get?id=${encodeURIComponent(id)}`);
+  
+    const res = await fetch(`/api/templates/get-habits?templateId=${encodeURIComponent(id)}`);
     if (res.status === 401) { setGuest(true); return; }
     if (!res.ok) {
       const e = (await res.json().catch(() => ({}))) as ErrorResponse;
       setMsg(e.error || "Failed to load template");
       return;
     }
-
-    const data = (await res.json()) as TemplateGetResponse;
+  
+    const data = (await res.json()) as TemplateGetHabitsResponse;
     setTemplateHabitIds(new Set(data.habitIds || []));
   }
 
@@ -143,15 +144,13 @@ export default function Settings() {
       <div style={{ height: 14 }} />
 
       <section style={{ padding: 16, border: "1px solid #333", borderRadius: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Rules</h2>
+        <h2 style={{ marginTop: 0 }}>Earn IG Lock</h2>
         <div style={{ opacity: 0.85 }}>
           {rules ? (
             <>
-              <div>Daily win mode: <b>{rules.daily_win_mode}</b></div>
-              <div>Daily win threshold: <b>{rules.daily_win_threshold}</b></div>
-              <div>Weekly target: <b>{rules.weekly_target}</b></div>
-              <div>Monthly target: <b>{rules.monthly_target}</b></div>
-              <div>Week starts on: <b>{rules.week_starts_on}</b></div>
+              <div>Earn IG habit: <b>{rules.earn_ig_habit_id || "Not set"}</b></div>
+              <div>Steps habit: <b>{rules.steps_habit_id || "Not set"}</b></div>
+              <div>Study habit: <b>{rules.study_habit_id || "Not set"}</b></div>
             </>
           ) : (
             <div>Loading…</div>

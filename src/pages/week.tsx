@@ -3,11 +3,18 @@ import Link from "next/link";
 import { todayYMD } from "@/lib/date";
 import type { WeekResponse, StatsResponse } from "@/lib/types";
 
-type DayTile = {
-  day: string; // YYYY-MM-DD
+
+type ApiWeekDay = {
+  day: string;
+  templateId: string | null;
+  totalPoints: number;
+  donePoints: number;
   isWin: boolean;
-  pct: number; // 0..1
+  modeUsed: "points" | "core";
+  usedFallback: boolean;
 };
+
+type DayTile = ApiWeekDay & { pct: number };
 
 function mondayOf(day: string) {
   const d = new Date(day + "T00:00:00");
@@ -34,24 +41,32 @@ export default function Week() {
 
   useEffect(() => {
     let cancelled = false;
-
+  
     (async () => {
       const res = await fetch(`/api/week?start=${start}&end=${end}`);
       if (res.status === 401) {
         if (!cancelled) setGuest(true);
         return;
       }
-      const data = (await res.json()) as WeekResponse<DayTile>;
-      if (!cancelled) setTiles(data.days || []);
-
+  
+      const data = (await res.json()) as WeekResponse;
+  
+      const nextTiles: DayTile[] = (data.days || []).map((d) => ({
+        ...d,
+        pct: d.totalPoints ? d.donePoints / d.totalPoints : 0,
+      }));
+  
+      if (!cancelled) setTiles(nextTiles);
+  
       const sRes = await fetch(`/api/stats?day=${today}`);
       if (sRes.ok && !cancelled) setSummary((await sRes.json()) as StatsResponse);
     })();
-
+  
     return () => {
       cancelled = true;
     };
   }, [start, end, today]);
+  
 
   if (guest) {
     return (

@@ -1,48 +1,70 @@
-import { requireUser, type Env } from "../_lib/auth";
+import type { NextRequest } from "next/server";
+import { requireUser } from "@/lib/server/auth";
+import { first, run } from "@/lib/server/db";
+
+export const config = { runtime: "edge" };
 
 function j(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
-export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const auth = await requireUser(context.request, context.env);
+async function ensureDayPlan(userId: string, day: string) {
+  await run(
+    `INSERT INTO day_plan (user_id, day)
+     VALUES (?, ?)
+     ON CONFLICT(user_id, day) DO NOTHING`,
+    [userId, day]
+  );
+}
+
+export default async function handler(req: NextRequest): Promise<Response> {
+  const auth = await requireUser(req);
   if (!auth) return j({ error: "Unauthorized" }, 401);
 
-  const url = new URL(context.request.url);
-  const day = url.searchParams.get("day");
-  if (!day) return j({ error: "Missing day" }, 400);
+  const url = new URL(req.url);
 
-  const row = await context.env.DB.prepare(
-    `SELECT template_id FROM day_plan WHERE user_id = ? AND day = ?`
-  ).bind(auth.userId, day).first<{ template_id: string | null }>();
+  if (req.method === "GET") {
+    const day = url.searchParams.get("day");
+    if (!day) return j({ error: "Missing day" }, 400);
 
-  return j({ day, templateId: row?.template_id ?? null });
-};
+    await ensureDayPlan(auth.userId, day);
 
-export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const auth = await requireUser(context.request, context.env);
-  if (!auth) return j({ error: "Unauthorized" }, 401);
+    const row = await first<{ template_id: string | null }>(
+      `SELECT template_id FROM day_plan WHERE user_id = ? AND day = ?`,
+      [auth.userId, day]
+    );
 
-  const body = await context.request.json().catch(() => null) as
-    | { day?: string; templateId?: string | null }
-    | null;
-
-  const day = body?.day;
-  const templateId = body?.templateId ?? null;
-  if (!day) return j({ error: "Missing day" }, 400);
-
-  if (templateId) {
-    const owned = await context.env.DB.prepare(
-      `SELECT id FROM templates WHERE id = ? AND user_id = ?`
-    ).bind(templateId, auth.userId).first();
-    if (!owned) return j({ error: "Template not found/owned" }, 400);
+    return j({ templateId: row?.template_id ?? null });
   }
 
-  await context.env.DB.prepare(
-    `INSERT INTO day_plan (user_id, day, template_id)
-     VALUES (?, ?, ?)
-     ON CONFLICT(user_id, day) DO UPDATE SET template_id = excluded.template_id`
-  ).bind(auth.userId, day, templateId).run();
+  if (req.method === "POST") {
+    const body = (await req.json().catch(() => null)) as { day?: string; templateId?: string | null } | null;
+    const day = body?.day;
+    const templateId = body?.templateId ?? null;
 
-  return j({ ok: true });
-};
+    if (!day) return j({ error: "Bad request" }, 400);
+
+    await ensureDayPlan(auth.userId, day);
+
+    // Validate template belongs to user if provided
+    if (templateId) {
+      const t = await first<{ id: string }>(
+        `SELECT id FROM habit_templates WHERE id = ? AND user_id = ?`,
+        [templateId, auth.userId]
+      );
+      if (!t) return j({ error: "Template not found" }, 404);
+    }
+
+    await run(
+      `UPDATE day_plan SET template_id = ? WHERE user_id = ? AND day = ?`,
+      [templateId, auth.userId, day]
+    );
+
+    return j({ ok: true });
+  }
+
+  return j({ error: "Method not allowed" }, 405);
+}

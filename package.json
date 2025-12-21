@@ -2,12 +2,18 @@
   "name": "habitboard",
   "version": "0.1.0",
   "private": true,
-"scripts": {
-  "dev:next": "next dev",
-  "build": "next build",
-  "build:cf": "next build && npx @cloudflare/next-on-pages",
-  "preview": "npx wrangler pages dev .vercel/output/static --compatibility-date=2025-12-15 --port 8788"
-},
+  
+    "scripts": {
+      "dev:next": "next dev",
+  
+      "build": "next build",
+      "build:cf": "npx @cloudflare/next-on-pages@1",
+  
+      "preview": "wrangler pages dev .vercel/output/static --port 8788",
+      "deploy": "wrangler pages deploy .vercel/output/static --project-name habitboard",
+  
+      "lint": "eslint"
+    },
   "dependencies": {
     "next": "15.5.2",
     "react": "18.3.1",
