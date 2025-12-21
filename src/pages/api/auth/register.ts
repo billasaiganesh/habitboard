@@ -20,15 +20,23 @@ export default async function handler(req: NextRequest): Promise<Response> {
 
   const body =
     (await req.json().catch(() => null)) as
-      | { username?: string; password?: string }
+      | { username?: string; password?: string; passcode?: string }
       | null;
 
-  const username = (body?.username || "").trim();
-  const password = body?.password || "";
+  const username = (body?.username ?? "").trim();
 
-  if (!username || username.length < 3) return j({ error: "Username must be at least 3 characters" }, 400);
-  if (!/^[a-zA-Z0-9_]+$/.test(username)) return j({ error: "Username can only use letters, numbers, _" }, 400);
-  if (!password || password.length < 6) return j({ error: "Password must be at least 6 characters" }, 400);
+  // ✅ accept either field name (frontend can send passcode OR password)
+  const password = String(body?.password ?? body?.passcode ?? "");
+
+  if (!username || username.length < 3) {
+    return j({ error: "Username must be at least 3 characters" }, 400);
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    return j({ error: "Username can only use letters, numbers, _" }, 400);
+  }
+  if (password.length < 6) {
+    return j({ error: "Password must be at least 6 characters" }, 400);
+  }
 
   const exists = await first<{ id: string }>(
     `SELECT id FROM users WHERE username = ?`,
