@@ -1,32 +1,33 @@
-export function getCookie(req: Request, name: string) {
-  const h = req.headers.get("cookie") || "";
-  const parts = h.split(";").map((p) => p.trim());
-  for (const p of parts) {
-    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
-  }
-  return null;
+export function getCookie(req: Request, name: string): string | null {
+  const cookie = req.headers.get("cookie");
+  if (!cookie) return null;
+
+  const match = cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function setCookie(name: string, value: string, opts: {
-  maxAgeSeconds?: number;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: "Lax" | "Strict" | "None";
-  path?: string;
-} = {}) {
-  const {
-    maxAgeSeconds,
-    httpOnly = true,
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-  } = opts;
+export type SameSite = "Lax" | "Strict" | "None";
 
-  let out = `${name}=${encodeURIComponent(value)}; Path=${path}; SameSite=${sameSite}`;
-  if (typeof maxAgeSeconds === "number") out += `; Max-Age=${maxAgeSeconds}`;
-  if (httpOnly) out += `; HttpOnly`;
-  if (secure) out += `; Secure`;
-  return out;
+export function setCookie(
+  name: string,
+  value: string,
+  options: {
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: SameSite;
+    path?: string;
+    maxAge?: number;
+  } = {}
+) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  if (options.path) parts.push(`Path=${options.path}`);
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
+
+  return parts.join("; ");
 }
 
 export function deleteCookie(name: string) {

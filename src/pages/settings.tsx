@@ -9,13 +9,13 @@ import type {
   ErrorResponse,
   TemplateGetHabitsResponse,
 } from "@/lib/types";
-
+import { useMe } from "@/lib/useMe";
 
 type HabitsResponse = { habits: Habit[] };
 
 export default function Settings() {
   const [guest, setGuest] = useState(false);
-
+  const { username } = useMe(); // added at the header
   const [habits, setHabits] = useState<Habit[]>([]);
   const [rules, setRules] = useState<Rules | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -98,6 +98,12 @@ export default function Settings() {
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ marginTop: 0 }}>Settings</h1>
+      
+      {username && (
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.8 }}>
+            Logged in as <b>{username}</b>
+          </div>
+      )}
 
       {msg ? (
         <div style={{ padding: 12, border: "1px solid #333", borderRadius: 10, marginBottom: 12 }}>

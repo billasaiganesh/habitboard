@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { requireUser } from "@/lib/server/auth";
-import { DB, first, all, run } from "@/lib/server/db";
+import { first, all, run } from "@/lib/server/db";
 
 export const config = { runtime: "edge" };
 

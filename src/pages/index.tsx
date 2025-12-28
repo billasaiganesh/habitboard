@@ -10,6 +10,8 @@ import type {
   Rules,
   Habit,
 } from "@/lib/types";
+import { useMe } from "@/lib/useMe";
+
 
 function Ring({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(1, value));
@@ -36,15 +38,14 @@ function Ring({ value }: { value: number }) {
           placeItems: "center",
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.85 }}>
-          {Math.round(pct * 100)}%
-        </div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>{Math.round(pct * 100)}%</div>
       </div>
     </div>
   );
 }
 
 export default function Today() {
+  const { username } = useMe(); // added at the header
   const [me, setMe] = useState<"loading" | "guest" | "authed">("loading");
   const [day, setDay] = useState<string>("");
 
@@ -52,11 +53,9 @@ export default function Today() {
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [stats, setStats] = useState<StatsResponse | null>(null);
 
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>(
-    []
-  );
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
-
+  
   const [rules, setRules] = useState<Rules | null>(null);
 
   useEffect(() => {
@@ -74,7 +73,7 @@ export default function Today() {
     }
 
     // day plan
-    const pRes = await fetch(`/api/day-plan?day=${day}`);
+    const pRes = await fetch(`/api/day-plan?day=${encodeURIComponent(day)}`);
     if (pRes.status === 401) {
       setMe("guest");
       return;
@@ -83,7 +82,7 @@ export default function Today() {
     setTemplateId(pData.templateId ?? null);
 
     // today
-    const res = await fetch(`/api/today?day=${day}`);
+    const res = await fetch(`/api/today?day=${encodeURIComponent(day)}`);
     if (res.status === 401) {
       setMe("guest");
       return;
@@ -99,12 +98,12 @@ export default function Today() {
     setChecks(map);
 
     // stats
-    const s = await fetch(`/api/stats?day=${day}`);
+    const s = await fetch(`/api/stats?day=${encodeURIComponent(day)}`);
     if (s.ok) setStats((await s.json()) as StatsResponse);
   }
 
   useEffect(() => {
-    if (day) load();
+    if (day) void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day]);
 
@@ -126,7 +125,7 @@ export default function Today() {
       body: JSON.stringify({ day, habitId, checked }),
     });
 
-    const s = await fetch(`/api/stats?day=${day}`);
+    const s = await fetch(`/api/stats?day=${encodeURIComponent(day)}`);
     if (s.ok) setStats((await s.json()) as StatsResponse);
   }
 
@@ -134,13 +133,12 @@ export default function Today() {
   const earnId = rules?.earn_ig_habit_id ?? null;
   const stepsId = rules?.steps_habit_id ?? null;
   const studyId = rules?.study_habit_id ?? null;
-  const depsMet =
-    !!stepsId && !!studyId && !!checks[stepsId] && !!checks[studyId];
+  const depsMet = !!stepsId && !!studyId && !!checks[stepsId] && !!checks[studyId];
 
   useEffect(() => {
     if (!rules) return;
     if (!earnId || !stepsId || !studyId) return;
-    if (checks[earnId] && !depsMet) toggle(earnId, false);
+    if (checks[earnId] && !depsMet) void toggle(earnId, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rules, depsMet, earnId, stepsId, studyId]);
 
@@ -154,14 +152,10 @@ export default function Today() {
     );
   }
 
-  if (me === "loading" || !day)
-    return <div style={{ padding: 24 }}>Loading…</div>;
+  if (me === "loading" || !day) return <div style={{ padding: 24 }}>Loading…</div>;
 
   const totalPoints = habits.reduce((s, h) => s + (h.points || 0), 0);
-  const donePoints = habits.reduce(
-    (s, h) => s + (checks[h.id] ? h.points || 0 : 0),
-    0
-  );
+  const donePoints = habits.reduce((s, h) => s + (checks[h.id] ? h.points || 0 : 0), 0);
 
   const sections: Array<["Morning" | "Work" | "Evening", string]> = [
     ["Morning", "Morning"],
@@ -184,14 +178,13 @@ export default function Today() {
           <h1 style={{ margin: 0 }}>Today</h1>
           <div style={{ opacity: 0.75 }}>{day}</div>
 
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              gap: 12,
-              alignItems: "center",
-            }}
-          >
+          {username && (
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.8 }}>
+            Logged in as <b>{username}</b>
+          </div>
+          )}
+
+          <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "center" }}>
             <Ring value={totalPoints ? donePoints / totalPoints : 0} />
             <div style={{ opacity: 0.9 }}>
               <div>
@@ -201,31 +194,22 @@ export default function Today() {
               {stats && (
                 <div style={{ marginTop: 6, opacity: 0.85 }}>
                   <div>
-                    {stats.daily.isWin ? "✅ Day Win" : "⏳ Not yet"} • 🔥{" "}
-                    {stats.streaks.dailyStreak} day streak
+                    {stats.daily.isWin ? "✅ Day Win" : "⏳ Not yet"} • 🔥 {stats.streaks.dailyStreak} day streak
                   </div>
                   <div>
-                    📅 Week: {stats.week.winsThisWeek}/{stats.week.weeklyTarget}{" "}
-                    wins • 🏆 {stats.streaks.weeklyStreak} week streak
+                    📅 Week: {stats.week.winsThisWeek}/{stats.week.weeklyTarget} wins • 🏆 {stats.streaks.weeklyStreak} week
+                    streak
                   </div>
                   <div>
-                    🗓️ Month: {stats.month.winsThisMonth}/{stats.month.monthlyTarget}{" "}
-                    wins • 🏅 {stats.streaks.monthlyStreak} month streak
+                    🗓️ Month: {stats.month.winsThisMonth}/{stats.month.monthlyTarget} wins • 🏅 {stats.streaks.monthlyStreak} month
+                    streak
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <label style={{ opacity: 0.85 }}>Plan:</label>
             <select
               value={templateId ?? ""}
@@ -251,6 +235,7 @@ export default function Today() {
         </div>
 
         <nav style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <Link href="/habits">Habits</Link>
           <Link href="/week">Week</Link>
           <Link href="/month">Month</Link>
           <Link href="/settings">Settings</Link>
@@ -266,6 +251,16 @@ export default function Today() {
       </header>
 
       <div style={{ height: 16 }} />
+
+      {habits.length === 0 ? (
+        <div style={{ padding: 16, border: "1px solid #333", borderRadius: 12 }}>
+          <div style={{ fontWeight: 700 }}>No habits yet</div>
+          <div style={{ opacity: 0.85, marginTop: 6 }}>Add your first habit to start tracking.</div>
+          <div style={{ marginTop: 10 }}>
+            <Link href="/habits">Go to Habits →</Link>
+          </div>
+        </div>
+      ) : null}
 
       {sections.map(([key, label]) => {
         const list = habits.filter((h) => h.section === key);
@@ -286,23 +281,19 @@ export default function Today() {
               {list.map((h) => {
                 const isEarnIG = !!earnId && h.id === earnId;
                 const disabled = isEarnIG && !depsMet;
+
                 return (
-                  <label
-                    key={h.id}
-                    style={{ display: "flex", gap: 10, alignItems: "center" }}
-                  >
+                  <label key={h.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <input
                       type="checkbox"
                       checked={!!checks[h.id]}
                       disabled={disabled}
-                      onChange={(e) => toggle(h.id, e.target.checked)}
+                      onChange={(e) => void toggle(h.id, e.target.checked)}
                     />
                     <span style={{ fontWeight: 700 }}>{h.name}</span>
                     <span style={{ opacity: 0.7 }}>({h.points} pts)</span>
                     {isEarnIG && !depsMet && (
-                      <span style={{ opacity: 0.7, fontSize: 12 }}>
-                        Locked until Steps + Study
-                      </span>
+                      <span style={{ opacity: 0.7, fontSize: 12 }}>Locked until Steps + Study</span>
                     )}
                   </label>
                 );

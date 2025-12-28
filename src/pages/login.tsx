@@ -8,39 +8,61 @@ export default function Login() {
 
   async function submit() {
     setMsg(null);
+  
     const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, passcode }),
     });
+  
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
       setMsg(data.error || "Failed");
       return;
-    }    
+    }
+  
+    // After register, go to habits setup page
+    if (mode === "register") {
+      window.location.href = "/habits";
+      return;
+    }
+  
     window.location.href = "/";
   }
-
+  
   return (
     <div style={{ padding: 24, maxWidth: 420, margin: "0 auto" }}>
       <h1>Habitboard</h1>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button onClick={() => setMode("login")} disabled={mode === "login"}>Login</button>
-        <button onClick={() => setMode("register")} disabled={mode === "register"}>Register</button>
+        <button onClick={() => setMode("login")} disabled={mode === "login"}>
+          Login
+        </button>
+        <button onClick={() => setMode("register")} disabled={mode === "register"}>
+          Register
+        </button>
       </div>
 
-      {msg && <p>{msg}</p>}
+      {msg && <p style={{ color: "salmon" }}>{msg}</p>}
 
       <label style={{ display: "block", marginBottom: 8 }}>
         Username
-        <input value={username} onChange={(e) => setUsername(e.target.value)} style={{ width: "100%" }} />
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          style={{ width: "100%" }}
+        />
       </label>
 
       <label style={{ display: "block", marginBottom: 12 }}>
         Passcode
-        <input type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} style={{ width: "100%" }} />
+        <input
+          type="password"
+          value={passcode}
+          onChange={(e) => setPasscode(e.target.value)}
+          style={{ width: "100%" }}
+        />
       </label>
 
       <button onClick={submit} style={{ width: "100%" }}>

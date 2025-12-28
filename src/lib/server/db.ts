@@ -1,25 +1,18 @@
 import { getEnv } from "./env";
 
-export function DB(): D1Database {
-  return getEnv().DB;
-}
-
-export async function first<T extends Record<string, unknown>>(
-  sql: string,
-  bindings: unknown[] = []
-): Promise<T | null> {
-  const row = await DB().prepare(sql).bind(...bindings).first<T>();
+export async function first<T = unknown>(sql: string, params: unknown[] = []): Promise<T | null> {
+  const { DB } = getEnv();
+  const row = await DB.prepare(sql).bind(...params).first<T>();
   return row ?? null;
 }
 
-export async function all<T extends Record<string, unknown>>(
-  sql: string,
-  bindings: unknown[] = []
-): Promise<T[]> {
-  const res = await DB().prepare(sql).bind(...bindings).all<T>();
+export async function all<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
+  const { DB } = getEnv();
+  const res = await DB.prepare(sql).bind(...params).all<T>();
   return (res.results ?? []) as T[];
 }
 
-export async function run(sql: string, bindings: unknown[] = []) {
-  return DB().prepare(sql).bind(...bindings).run();
+export async function run(sql: string, params: unknown[] = []): Promise<void> {
+  const { DB } = getEnv();
+  await DB.prepare(sql).bind(...params).run();
 }

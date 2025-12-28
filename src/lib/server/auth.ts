@@ -1,5 +1,7 @@
+// src/lib/server/auth.ts
+
 import { getCookie } from "./cookies";
-import { first } from "./db";
+import { first, run } from "./db";
 
 export async function requireUser(req: Request) {
   const token = getCookie(req, "hb_session");
@@ -20,7 +22,11 @@ export async function requireUser(req: Request) {
   if (!row) return null;
 
   const nowIso = new Date().toISOString().slice(0, 19).replace("T", " ");
-  if (row.expires_at < nowIso) return null;
+  if (row.expires_at < nowIso) {
+    // optional cleanup
+    await run(`DELETE FROM sessions WHERE token = ?`, [token]);
+    return null;
+  }
 
   return { userId: row.user_id, username: row.username, token };
 }

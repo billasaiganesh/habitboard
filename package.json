@@ -9,7 +9,8 @@
       "build": "next build",
       "build:cf": "npx @cloudflare/next-on-pages@1",
   
-      "preview": "wrangler pages dev .vercel/output/static --port 8788",
+      "preview": "wrangler pages dev .vercel/output/static --port 8788 --compatibility-date=2025-12-15 --compatibility-flag=nodejs_compat",
+
       "deploy": "wrangler pages deploy .vercel/output/static --project-name habitboard",
   
       "lint": "eslint"

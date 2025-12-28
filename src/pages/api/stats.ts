@@ -49,7 +49,7 @@ async function ensureSettings(userId: string) {
 
 async function pointsForDay(userId: string, day: string) {
   const plan = await first<{ template_id: string | null }>(
-    `SELECT template_id FROM day_plans WHERE user_id = ? AND day = ?`,
+    `SELECT template_id FROM day_plan WHERE user_id = ? AND day = ?`,
     [userId, day]
   );
   const templateId = plan?.template_id ?? null;

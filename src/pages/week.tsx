@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { todayYMD } from "@/lib/date";
 import type { WeekResponse, StatsResponse } from "@/lib/types";
-
+import { useMe } from "@/lib/useMe";
 
 type ApiWeekDay = {
   day: string;
@@ -25,7 +25,7 @@ function mondayOf(day: string) {
 
 export default function Week() {
   const today = todayYMD();
-
+  const { username } = useMe(); // added at the header
   const [guest, setGuest] = useState(false);
   const [start, setStart] = useState(mondayOf(today));
   const [tiles, setTiles] = useState<DayTile[]>([]);
@@ -84,6 +84,12 @@ export default function Week() {
         <div>
           <h1 style={{ margin: 0 }}>Week</h1>
           <div style={{ opacity: 0.75 }}>{title}</div>
+
+          {username && (
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.8 }}>
+            Logged in as <b>{username}</b>
+          </div>
+          )}
 
           <div style={{ marginTop: 10 }}>
             <label style={{ opacity: 0.85 }}>Week starts (Monday): </label>

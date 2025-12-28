@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { todayYMD } from "@/lib/date";
 import type { MonthResponse, StatsResponse } from "@/lib/types";
+import { useMe } from "@/lib/useMe";
 
 type DayRow = {
   day: string;
@@ -25,6 +26,7 @@ type DayTile = ApiDay & { pct: number };
 
 
 export default function Month() {
+  const { username } = useMe(); // added at the header
   const today = todayYMD();
   const [guest, setGuest] = useState(false);
   const [ym, setYm] = useState(today.slice(0, 7)); // YYYY-MM
@@ -71,6 +73,12 @@ export default function Month() {
         <div>
           <h1 style={{ margin: 0 }}>Month</h1>
           <div style={{ opacity: 0.75 }}>{label}</div>
+
+          {username && (
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.8 }}>
+            Logged in as <b>{username}</b>
+          </div>
+          )}
 
           <div style={{ marginTop: 10 }}>
             <input
